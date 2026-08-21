@@ -1,3 +1,128 @@
-from django.shortcuts import render
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, generics, status, viewsets
+from rest_framework.exceptions import NotFound
+from rest_framework.parsers import (
+    FormParser,
+    JSONParser,
+    MultiPartParser,
+)
+from rest_framework.response import Response
 
-# Create your views here.
+from .models import Education, Experience, Profile, Skill
+from .serializers import (
+    EducationSerializer,
+    ExperienceSerializer,
+    ProfileSerializer,
+    SkillSerializer,
+)
+
+
+class ProfileView(generics.GenericAPIView):
+    serializer_class = ProfileSerializer
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+        JSONParser,
+    ]
+    http_method_names = [
+        "get",
+        "patch",
+        "head",
+        "options",
+    ]
+
+    def get_object(self):
+        profile = Profile.get_solo()
+
+        if profile is None:
+            raise NotFound(
+                "The owner profile has not been configured yet."
+            )
+
+        self.check_object_permissions(self.request, profile)
+        return profile
+
+    def get(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_object())
+        return Response(serializer.data)
+
+    def patch(self, request, *args, **kwargs):
+        profile = self.get_object()
+
+        serializer = self.get_serializer(
+            profile,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SkillViewSet(viewsets.ModelViewSet):
+    queryset = Skill.objects.all()
+    serializer_class = SkillSerializer
+
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = [
+        "category",
+        "is_featured",
+    ]
+    search_fields = [
+        "name",
+    ]
+    ordering_fields = [
+        "display_order",
+        "proficiency",
+    ]
+    ordering = [
+        "display_order",
+        "name",
+    ]
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+
+class ExperienceViewSet(viewsets.ModelViewSet):
+    queryset = Experience.objects.all().order_by(
+        "-start_date",
+        "display_order",
+    )
+    serializer_class = ExperienceSerializer
+    filter_backends = []
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+
+class EducationViewSet(viewsets.ModelViewSet):
+    queryset = Education.objects.all()
+    serializer_class = EducationSerializer
+    filter_backends = []
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]

@@ -9,6 +9,10 @@ urlpatterns = [
         "api/auth/",
         include("accounts.urls"),
     ),
+    path(
+        "api/",
+        include("portfolio.urls"),
+    ),
 ]
 
 if settings.DEBUG:
