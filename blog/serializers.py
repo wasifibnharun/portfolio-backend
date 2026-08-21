@@ -10,7 +10,7 @@ from portfolio.validators import (
     validate_image_size,
 )
 
-from .models import Category, Post, Tag
+from .models import Category, Comment, Post, Tag
 
 User = get_user_model()
 
@@ -298,3 +298,161 @@ class PostWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+class CommentReplySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "name",
+            "website",
+            "content",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class PublicCommentSerializer(serializers.ModelSerializer):
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "name",
+            "website",
+            "content",
+            "created_at",
+            "updated_at",
+            "replies",
+        )
+        read_only_fields = fields
+
+    def get_replies(self, obj):
+        approved_replies = obj.replies.filter(
+            is_approved=True
+        ).order_by("-created_at")
+
+        return CommentReplySerializer(
+            approved_replies,
+            many=True,
+            context=self.context,
+        ).data
+
+
+class CommentCreateSerializer(serializers.ModelSerializer):
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Comment.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = Comment
+        fields = (
+            "name",
+            "email",
+            "website",
+            "content",
+            "parent",
+        )
+
+    def validate_name(self, value):
+        value = value.strip()
+
+        if len(value) < 2:
+            raise serializers.ValidationError(
+                "Name must contain at least 2 characters."
+            )
+
+        return value
+
+    def validate_content(self, value):
+        value = value.strip()
+
+        if len(value) < 5:
+            raise serializers.ValidationError(
+                "Comment must contain at least 5 characters."
+            )
+
+        if len(value) > 1000:
+            raise serializers.ValidationError(
+                "Comment must not exceed 1000 characters."
+            )
+
+        return value
+
+    def validate_parent(self, parent):
+        if parent is None:
+            return parent
+
+        post = self.context["post"]
+
+        if parent.post_id != post.pk:
+            raise serializers.ValidationError(
+                "The parent comment belongs to another post."
+            )
+
+        if not parent.is_approved:
+            raise serializers.ValidationError(
+                "Replies can only be added to approved comments."
+            )
+
+        if parent.parent_id is not None:
+            raise serializers.ValidationError(
+                "Only one level of comment replies is allowed."
+            )
+
+        return parent
+
+    def create(self, validated_data):
+        return Comment.objects.create(
+            post=self.context["post"],
+            is_approved=False,
+            **validated_data,
+        )
+
+
+class CommentPostSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Post
+        fields = (
+            "title",
+            "slug",
+        )
+        read_only_fields = fields
+
+
+class CommentModerationSerializer(serializers.ModelSerializer):
+    post = CommentPostSummarySerializer(read_only=True)
+    parent = serializers.IntegerField(
+        source="parent_id",
+        read_only=True,
+    )
+
+    class Meta:
+        model = Comment
+        fields = (
+            "id",
+            "post",
+            "name",
+            "email",
+            "website",
+            "content",
+            "parent",
+            "is_approved",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "post",
+            "name",
+            "email",
+            "website",
+            "content",
+            "parent",
+            "created_at",
+            "updated_at",
+        )

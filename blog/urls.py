@@ -1,7 +1,11 @@
+from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
     CategoryViewSet,
+    CommentModerationViewSet,
+    PostCommentsView,
+    PostLikeToggleView,
     PostViewSet,
     TagViewSet,
 )
@@ -25,6 +29,24 @@ router.register(
     PostViewSet,
     basename="post",
 )
+router.register(
+    "comments",
+    CommentModerationViewSet,
+    basename="comment",
+)
 
 
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "posts/<slug:slug>/like/",
+        PostLikeToggleView.as_view(),
+        name="post-like",
+    ),
+    path(
+        "posts/<slug:slug>/comments/",
+        PostCommentsView.as_view(),
+        name="post-comments",
+    ),
+]
+
+urlpatterns += router.urls

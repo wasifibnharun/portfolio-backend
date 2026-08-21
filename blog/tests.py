@@ -1,5 +1,6 @@
 import tempfile
 from io import BytesIO
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -13,7 +14,6 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Category, Comment, Post, PostLike, Tag
-
 
 User = get_user_model()
 
@@ -390,4 +390,375 @@ class BlogAPITests(APITestCase):
             response.data["cover_image"].startswith(
                 "http://testserver/media/"
             )
+        )
+
+class BlogInteractionAPITests(APITestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.media_directory = tempfile.TemporaryDirectory(
+            dir=settings.BASE_DIR,
+        )
+        cls.media_override = override_settings(
+            MEDIA_ROOT=cls.media_directory.name
+        )
+        cls.media_override.enable()
+
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
+        cls.media_override.disable()
+        cls.media_directory.cleanup()
+
+    def setUp(self):
+        cache.clear()
+
+        self.owner = User.objects.create_superuser(
+            username="interaction-owner",
+            email="owner@example.com",
+            password="OwnerPassword!934",
+        )
+        self.normal_user = User.objects.create_user(
+            username="interaction-user",
+            email="user@example.com",
+            password="NormalPassword!934",
+        )
+
+        self.category = Category.objects.create(
+            name="Interaction Category"
+        )
+        self.tag = Tag.objects.create(
+            name="Interaction Tag"
+        )
+
+        self.post = Post.objects.create(
+            title="Published Interaction Post",
+            excerpt="Testing blog interactions.",
+            content="Published interaction content. " * 15,
+            cover_image=create_blog_image("interaction.png"),
+            category=self.category,
+            author=self.owner,
+            status=Post.Status.PUBLISHED,
+        )
+        self.post.tags.add(self.tag)
+
+        self.related_post = Post.objects.create(
+            title="Related Interaction Post",
+            excerpt="Related post.",
+            content="Related published content. " * 15,
+            cover_image=create_blog_image("related.png"),
+            category=self.category,
+            author=self.owner,
+            status=Post.Status.PUBLISHED,
+        )
+        self.related_post.tags.add(self.tag)
+
+        self.draft = Post.objects.create(
+            title="Draft Interaction Post",
+            excerpt="Private draft.",
+            content="Private draft content.",
+            cover_image=create_blog_image("interaction-draft.png"),
+            category=self.category,
+            author=self.owner,
+            status=Post.Status.DRAFT,
+        )
+        self.draft.tags.add(self.tag)
+
+    def authenticate(self, user):
+        access = RefreshToken.for_user(user).access_token
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {access}"
+        )
+
+    def test_like_requires_visitor_header(self):
+        response = self.client.post(
+            reverse(
+                "blog:post-like",
+                kwargs={"slug": self.post.slug},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_like_is_an_idempotent_toggle(self):
+        url = reverse(
+            "blog:post-like",
+            kwargs={"slug": self.post.slug},
+        )
+
+        first = self.client.post(
+            url,
+            HTTP_X_VISITOR_ID="visitor-abc",
+        )
+        second = self.client.post(
+            url,
+            HTTP_X_VISITOR_ID="visitor-abc",
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertTrue(first.data["liked"])
+        self.assertEqual(first.data["likes_count"], 1)
+
+        self.assertFalse(second.data["liked"])
+        self.assertEqual(second.data["likes_count"], 0)
+
+    def test_draft_cannot_be_liked_publicly(self):
+        response = self.client.post(
+            reverse(
+                "blog:post-like",
+                kwargs={"slug": self.draft.slug},
+            ),
+            HTTP_X_VISITOR_ID="visitor-abc",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_view_counter_uses_visitor_cooldown(self):
+        url = reverse(
+            "blog:post-detail",
+            kwargs={"slug": self.post.slug},
+        )
+
+        self.client.get(
+            url,
+            HTTP_X_VISITOR_ID="visitor-one",
+        )
+        self.client.get(
+            url,
+            HTTP_X_VISITOR_ID="visitor-one",
+        )
+
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.views_count, 1)
+
+        response = self.client.get(
+            url,
+            HTTP_X_VISITOR_ID="visitor-two",
+        )
+
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.views_count, 2)
+        self.assertEqual(response.data["views_count"], 2)
+
+    def test_view_counter_falls_back_to_session(self):
+        url = reverse(
+            "blog:post-detail",
+            kwargs={"slug": self.post.slug},
+        )
+
+        self.client.get(url)
+        self.client.get(url)
+
+        self.post.refresh_from_db()
+        self.assertEqual(self.post.views_count, 1)
+
+    def test_public_comments_are_approved_threaded_and_private(self):
+        parent = Comment.objects.create(
+            post=self.post,
+            name="Parent User",
+            email="private@example.com",
+            content="Approved parent comment.",
+            is_approved=True,
+        )
+        Comment.objects.create(
+            post=self.post,
+            name="Reply User",
+            email="reply@example.com",
+            content="Approved reply comment.",
+            parent=parent,
+            is_approved=True,
+        )
+        Comment.objects.bulk_create(
+            [
+                Comment(
+                    post=self.post,
+                    name="Pending User",
+                    email="pending@example.com",
+                    content="Pending hidden comment.",
+                    is_approved=False,
+                )
+            ]
+        )
+
+        response = self.client.get(
+            reverse(
+                "blog:post-comments",
+                kwargs={"slug": self.post.slug},
+            )
+        )
+
+        self.assertEqual(response.data["count"], 1)
+        comment = response.data["results"][0]
+
+        self.assertNotIn("email", comment)
+        self.assertEqual(len(comment["replies"]), 1)
+        self.assertNotIn("email", comment["replies"][0])
+
+    @patch("blog.signals.send_mail")
+    def test_comment_creation_is_pending_and_sends_signal(
+        self,
+        mocked_send_mail,
+    ):
+        response = self.client.post(
+            reverse(
+                "blog:post-comments",
+                kwargs={"slug": self.post.slug},
+            ),
+            {
+                "name": "New Visitor",
+                "email": "visitor@example.com",
+                "website": "",
+                "content": "A valid pending comment.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertEqual(
+            response.data["message"],
+            "Your comment is awaiting approval.",
+        )
+
+        comment = Comment.objects.get(
+            pk=response.data["comment_id"]
+        )
+        self.assertFalse(comment.is_approved)
+        mocked_send_mail.assert_called_once()
+
+    def test_only_one_reply_level_is_allowed(self):
+        parent = Comment.objects.create(
+            post=self.post,
+            name="Parent",
+            email="parent@example.com",
+            content="Approved parent.",
+            is_approved=True,
+        )
+        reply = Comment.objects.create(
+            post=self.post,
+            name="Reply",
+            email="reply@example.com",
+            content="Approved reply.",
+            parent=parent,
+            is_approved=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "blog:post-comments",
+                kwargs={"slug": self.post.slug},
+            ),
+            {
+                "name": "Nested Reply",
+                "email": "nested@example.com",
+                "content": "This reply is too deeply nested.",
+                "parent": reply.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("parent", response.data)
+
+    def test_comment_moderation_is_owner_only(self):
+        pending = Comment.objects.create(
+            post=self.post,
+            name="Pending",
+            email="pending@example.com",
+            content="Pending moderation comment.",
+            is_approved=False,
+        )
+
+        list_url = reverse("blog:comment-list")
+
+        anonymous_response = self.client.get(list_url)
+        self.assertEqual(
+            anonymous_response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+        self.authenticate(self.normal_user)
+        normal_response = self.client.get(list_url)
+        self.assertEqual(
+            normal_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        self.authenticate(self.owner)
+        owner_response = self.client.get(
+            list_url,
+            {
+                "is_approved": "false",
+                "post": self.post.slug,
+            },
+        )
+
+        self.assertEqual(owner_response.data["count"], 1)
+
+        approve_response = self.client.patch(
+            reverse(
+                "blog:comment-detail",
+                kwargs={"pk": pending.pk},
+            ),
+            {"is_approved": True},
+            format="json",
+        )
+
+        self.assertEqual(
+            approve_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        pending.refresh_from_db()
+        self.assertTrue(pending.is_approved)
+
+    @patch("blog.signals.send_mail")
+    def test_comment_creation_throttle(self, mocked_send_mail):
+        url = reverse(
+            "blog:post-comments",
+            kwargs={"slug": self.post.slug},
+        )
+
+        for index in range(5):
+            response = self.client.post(
+                url,
+                {
+                    "name": f"Visitor {index}",
+                    "email": f"visitor{index}@example.com",
+                    "content": f"Valid comment number {index}.",
+                },
+                format="json",
+            )
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_201_CREATED,
+            )
+
+        throttled = self.client.post(
+            url,
+            {
+                "name": "Sixth Visitor",
+                "email": "sixth@example.com",
+                "content": "This request should be throttled.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            throttled.status_code,
+            status.HTTP_429_TOO_MANY_REQUESTS,
         )

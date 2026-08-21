@@ -171,3 +171,9 @@ SIMPLE_JWT = {
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "noreply@devfolio.local"
+
+POST_VIEW_COOLDOWN_SECONDS = config(
+    "POST_VIEW_COOLDOWN_SECONDS",
+    default=3600,
+    cast=int,
+)
