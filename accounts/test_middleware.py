@@ -60,3 +60,26 @@ class RequestTimingMiddlewareTests(TestCase):
                 for message in captured_logs.output
             )
         )
+
+class CORSConfigurationTests(TestCase):
+    def test_preflight_allows_visitor_id_header(self):
+        response = self.client.options(
+            "/api/auth/login/",
+            HTTP_ORIGIN="http://localhost:5173",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS=(
+                "content-type,x-visitor-id"
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Access-Control-Allow-Origin"],
+            "http://localhost:5173",
+        )
+
+        allowed_headers = response.headers[
+            "Access-Control-Allow-Headers"
+        ].lower()
+
+        self.assertIn("x-visitor-id", allowed_headers)
