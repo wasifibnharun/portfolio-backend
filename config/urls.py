@@ -13,6 +13,10 @@ urlpatterns = [
         "api/",
         include("portfolio.urls"),
     ),
+    path(
+        "api/",
+        include("blog.urls"),
+    ),
 ]
 
 if settings.DEBUG:
