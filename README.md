@@ -193,6 +193,14 @@ http://127.0.0.1:8000/admin/
 | `DEBUG` | Yes | `True` | Enables development debug mode |
 | `ALLOWED_HOSTS` | Yes | `127.0.0.1,localhost` | Comma-separated allowed hosts |
 | `CORS_ALLOWED_ORIGINS` | Yes | `http://localhost:5173` | Comma-separated trusted origins |
+| `CSRF_TRUSTED_ORIGINS` | Yes | `http://localhost:5173` | Origins trusted for CSRF-protected requests |
+| `SECURE_SSL_REDIRECT` | No | `False` | Redirect HTTP requests to HTTPS |
+| `SESSION_COOKIE_SECURE` | No | `False` | Send session cookies only over HTTPS |
+| `CSRF_COOKIE_SECURE` | No | `False` | Send CSRF cookies only over HTTPS |
+| `SECURE_HSTS_SECONDS` | No | `0` | HTTP Strict Transport Security duration |
+| `SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | `False` | Apply HSTS to subdomains |
+| `SECURE_HSTS_PRELOAD` | No | `False` | Request browser HSTS preloading |
+| `USE_X_FORWARDED_PROTO` | No | `False` | Trust HTTPS information from a deployment proxy |
 | `DB_ENGINE` | Yes | `django.db.backends.postgresql` | Django database backend |
 | `DB_NAME` | Yes | `devfolio_db` | PostgreSQL database name |
 | `DB_USER` | Yes | `devfolio_user` | PostgreSQL username |
@@ -495,7 +503,10 @@ erDiagram
         file resume
         string email
         string location
-        json social_links
+        string github_url
+        string linkedin_url
+        string x_url
+        string website_url
     }
     SKILL }o--o{ PROJECT : technology_stack
     CATEGORY ||--o{ POST : categorizes
