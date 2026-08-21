@@ -5,6 +5,7 @@ from .models import (
     Education,
     Experience,
     Profile,
+    Project,
     Skill,
 )
 from .validators import (
@@ -261,6 +262,97 @@ class EducationSerializer(serializers.ModelSerializer):
                     "end_year": (
                         "End year cannot be before start year."
                     )
+                }
+            )
+
+        return attrs
+
+class SkillRelationField(serializers.PrimaryKeyRelatedField):
+    """
+    Accept skill IDs when writing and return complete skill objects
+    when reading.
+    """
+
+    def to_representation(self, value):
+        return SkillSerializer(
+            value,
+            context=self.context,
+        ).data
+
+
+class ProjectSerializer(serializers.ModelSerializer):
+    cover_image = AbsoluteImageField(
+        validators=[
+            validate_image_extension,
+            validate_image_size,
+        ],
+    )
+    tech_stack = SkillRelationField(
+        many=True,
+        queryset=Skill.objects.all(),
+        allow_empty=False,
+        error_messages={
+            "empty": "Select at least one skill.",
+        },
+    )
+
+    class Meta:
+        model = Project
+        fields = (
+            "id",
+            "title",
+            "slug",
+            "summary",
+            "description",
+            "cover_image",
+            "tech_stack",
+            "category",
+            "live_url",
+            "github_url",
+            "is_featured",
+            "completed_date",
+            "display_order",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "slug",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_cover_image(self, file):
+        content_type = getattr(file, "content_type", "").lower()
+
+        if content_type and content_type not in IMAGE_CONTENT_TYPES:
+            raise serializers.ValidationError(
+                "Only JPG, JPEG, PNG, and WEBP images are allowed."
+            )
+
+        return file
+
+    def validate(self, attrs):
+        instance = self.instance
+
+        live_url = attrs.get(
+            "live_url",
+            getattr(instance, "live_url", ""),
+        )
+        github_url = attrs.get(
+            "github_url",
+            getattr(instance, "github_url", ""),
+        )
+
+        if not live_url and not github_url:
+            message = (
+                "Provide at least one live URL or GitHub URL."
+            )
+
+            raise serializers.ValidationError(
+                {
+                    "live_url": message,
+                    "github_url": message,
                 }
             )
 

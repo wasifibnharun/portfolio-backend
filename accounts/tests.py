@@ -1,14 +1,16 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
-
 
 User = get_user_model()
 
 
 class AuthenticationAPITests(APITestCase):
     def setUp(self):
+        cache.clear()
+
         self.owner_password = "OwnerTestPassword!934"
         self.normal_password = "NormalTestPassword!934"
 

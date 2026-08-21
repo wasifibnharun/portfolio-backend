@@ -5,6 +5,7 @@ from .views import (
     EducationViewSet,
     ExperienceViewSet,
     ProfileView,
+    ProjectViewSet,
     SkillViewSet,
 )
 
@@ -26,6 +27,11 @@ router.register(
     "education",
     EducationViewSet,
     basename="education",
+)
+router.register(
+    "projects",
+    ProjectViewSet,
+    basename="project",
 )
 
 

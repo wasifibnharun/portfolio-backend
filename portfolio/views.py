@@ -8,11 +8,14 @@ from rest_framework.parsers import (
 )
 from rest_framework.response import Response
 
-from .models import Education, Experience, Profile, Skill
+from .filters import ProjectFilter
+from .models import Education, Experience, Profile, Project, Skill
+from .pagination import ProjectPagination
 from .serializers import (
     EducationSerializer,
     ExperienceSerializer,
     ProfileSerializer,
+    ProjectSerializer,
     SkillSerializer,
 )
 
@@ -113,11 +116,51 @@ class ExperienceViewSet(viewsets.ModelViewSet):
         "options",
     ]
 
-
 class EducationViewSet(viewsets.ModelViewSet):
     queryset = Education.objects.all()
     serializer_class = EducationSerializer
     filter_backends = []
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    queryset = Project.objects.prefetch_related(
+        "tech_stack"
+    )
+    serializer_class = ProjectSerializer
+    pagination_class = ProjectPagination
+    lookup_field = "slug"
+
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+        JSONParser,
+    ]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_class = ProjectFilter
+    search_fields = [
+        "title",
+        "summary",
+        "description",
+    ]
+    ordering_fields = [
+        "completed_date",
+        "display_order",
+    ]
+    ordering = [
+        "display_order",
+        "-completed_date",
+    ]
     http_method_names = [
         "get",
         "post",
