@@ -1,7 +1,9 @@
 from django.urls import path
 from rest_framework.routers import SimpleRouter
 
+from .dashboard import DashboardStatsView
 from .views import (
+    ContactMessageViewSet,
     EducationViewSet,
     ExperienceViewSet,
     ProfileView,
@@ -33,6 +35,11 @@ router.register(
     ProjectViewSet,
     basename="project",
 )
+router.register(
+    "contact",
+    ContactMessageViewSet,
+    basename="contact",
+)
 
 
 urlpatterns = [
@@ -40,6 +47,11 @@ urlpatterns = [
         "profile/",
         ProfileView.as_view(),
         name="profile",
+    ),
+    path(
+        "dashboard/stats/",
+        DashboardStatsView.as_view(),
+        name="dashboard-stats",
     ),
 ]
 

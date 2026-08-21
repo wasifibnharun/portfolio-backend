@@ -1,17 +1,36 @@
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, generics, status, viewsets
-from rest_framework.exceptions import NotFound
-from rest_framework.parsers import (
-    FormParser,
-    JSONParser,
-    MultiPartParser,
+from rest_framework import (
+    filters,
+    generics,
+    mixins,
+    status,
+    viewsets,
 )
+from rest_framework.exceptions import NotFound
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+
+from accounts.permissions import IsOwner
+from config.throttles import IPScopedRateThrottle
 
 from .filters import ProjectFilter
-from .models import Education, Experience, Profile, Project, Skill
-from .pagination import ProjectPagination
+from .models import (
+    ContactMessage,
+    Education,
+    Experience,
+    Profile,
+    Project,
+    Skill,
+)
+from .pagination import (
+    ContactMessagePagination,
+    ProjectPagination,
+)
 from .serializers import (
+    ContactMessageCreateSerializer,
+    ContactMessageOwnerSerializer,
     EducationSerializer,
     ExperienceSerializer,
     ProfileSerializer,
@@ -169,3 +188,54 @@ class ProjectViewSet(viewsets.ModelViewSet):
         "head",
         "options",
     ]
+
+class ContactMessageViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = ContactMessage.objects.all().order_by(
+        "-created_at"
+    )
+    permission_classes = [IsOwner]
+    pagination_class = ContactMessagePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["is_read"]
+    throttle_classes = [
+        AnonRateThrottle,
+        IPScopedRateThrottle,
+    ]
+    parser_classes = [
+        JSONParser,
+        FormParser,
+    ]
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "delete",
+        "head",
+        "options",
+    ]
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [AllowAny()]
+
+        return super().get_permissions()
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ContactMessageCreateSerializer
+
+        return ContactMessageOwnerSerializer
+
+    def get_throttles(self):
+        if self.action == "create":
+            self.throttle_scope = "contact"
+        else:
+            self.throttle_scope = None
+
+        return super().get_throttles()

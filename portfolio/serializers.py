@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
+    ContactMessage,
     Education,
     Experience,
     Profile,
@@ -357,3 +358,88 @@ class ProjectSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+class ContactMessageCreateSerializer(
+    serializers.ModelSerializer
+):
+    class Meta:
+        model = ContactMessage
+        fields = (
+            "id",
+            "name",
+            "email",
+            "subject",
+            "message",
+            "created_at",
+        )
+        read_only_fields = (
+            "id",
+            "created_at",
+        )
+
+    def validate_name(self, value):
+        value = value.strip()
+
+        if len(value) < 2:
+            raise serializers.ValidationError(
+                "Name must contain at least 2 characters."
+            )
+
+        return value
+
+    def validate_subject(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError(
+                "Subject is required."
+            )
+
+        return value
+
+    def validate_message(self, value):
+        value = value.strip()
+
+        if len(value) < 10:
+            raise serializers.ValidationError(
+                "Message must contain at least 10 characters."
+            )
+
+        if len(value) > 2000:
+            raise serializers.ValidationError(
+                "Message must not exceed 2000 characters."
+            )
+
+        return value
+
+    def create(self, validated_data):
+        return ContactMessage.objects.create(
+            is_read=False,
+            **validated_data,
+        )
+
+
+class ContactMessageOwnerSerializer(
+    serializers.ModelSerializer
+):
+    class Meta:
+        model = ContactMessage
+        fields = (
+            "id",
+            "name",
+            "email",
+            "subject",
+            "message",
+            "is_read",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "name",
+            "email",
+            "subject",
+            "message",
+            "created_at",
+            "updated_at",
+        )
