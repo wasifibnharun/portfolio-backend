@@ -27,7 +27,7 @@ INSTALLED_APPS = [
 
     "accounts",
     "portfolio",
-    "blog",
+    "blog.apps.BlogConfig",
 ]
 
 
