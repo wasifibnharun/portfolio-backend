@@ -32,6 +32,7 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
+    "config.middleware.RequestTimingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -177,3 +178,26 @@ POST_VIEW_COOLDOWN_SECONDS = config(
     default=3600,
     cast=int,
 )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "request_timing": {
+            "format": "%(message)s",
+        },
+    },
+    "handlers": {
+        "request_timing_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "request_timing",
+        },
+    },
+    "loggers": {
+        "request_timing": {
+            "handlers": ["request_timing_console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
